@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+<title>小绵羊飞行 - 专属版本</title>
+<style>
+  /* 之前的 CSS 样式全部保留 */
+  body { margin:0; overflow:hidden; background:#87CEEB; font-family: sans-serif; }
+  canvas { display:block; }
+  #ui { position:absolute; top:20px; width:100%; text-align:center; color:white; font-size:24px; font-weight:bold; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); pointer-events: none; z-index: 5; }
+  #highScore { position:absolute; top:20px; right:20px; color:yellow; font-weight:bold; pointer-events: none; z-index: 5; }
+  #start { position:absolute; top:50%; width:100%; text-align:center; transform:translateY(-50%); color:white; font-size:26px; font-weight:bold; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); pointer-events: none; z-index: 5; }
+  #restartBtn { position:absolute; bottom:50px; width:100%; text-align:center; display:none; z-index: 10; }
+  button { padding: 12px 25px; font-size: 18px; background: white; border: none; border-radius: 30px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+</style>
+</head>
+
+<body>
+
+<div id="ui">0 / 5</div>
+<div id="highScore">最高：0</div>
+<div id="start">🐑 点击开始</div>
+<div id="restartBtn"><button onclick="startEndless()">进入无尽模式</button></div>
+
+<canvas id="game"></canvas>
+
+<script>
+// --- 🔐 密码保护部分开始 ---
+// 只要一打开网页就会弹出这个
+let pw = prompt("请输入暗号（提示：盒子外面🤫）：");
+if (pw !== "0426Ainiya520") {
+    alert("暗号错误！只有小绵羊才能进入哦~");
+    // 如果输错，直接清空页面并停止执行
+    document.body.innerHTML = "<div style='height:100vh; display:flex; align-items:center; justify-content:center; background:#87CEEB; color:white; font-size:20px;'>🚫 拒绝访问，请刷新重试。</div>";
+    throw new Error("Password Incorrect"); // 停止后续脚本运行
+}
+// --- 🔐 密码保护部分结束 ---
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+let sheep, pipes, bullets, score;
+let started = false, gameOver = false, win = false;
+let endlessMode = false;
+
+// 你的专属视频二维码链接
+const targetUrl = "https://www.youtube.com/watch?v=uuMbdCs4wKM";
+const qrImg = new Image();
+qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(targetUrl)}`;
+
+let best = localStorage.getItem("sheep_best") || 0;
+document.getElementById("highScore").innerText = "最高：" + best;
+
+function resetGame() {
+  sheep = { x: 80, y: canvas.height / 2, size: 24, velocity: 0 };
+  pipes = [];
+  bullets = [];
+  score = 0;
+  started = false;
+  gameOver = false;
+  win = false;
+  document.getElementById("start").style.display = "block";
+  document.getElementById("start").style.top = "50%";
+  document.getElementById("start").innerText = endlessMode ? "🐑 无尽模式 点击开始" : "🐑 点击开始";
+  document.getElementById("restartBtn").style.display = "none";
+}
+
+resetGame();
+
+function jump(e) {
+  if (e && e.type === "touchstart") e.preventDefault();
+  if (!started && !win) {
+    started = true;
+    document.getElementById("start").style.display = "none";
+  }
+  if (!gameOver && !win) {
+    sheep.velocity = -7;
+  } else if (gameOver) {
+    resetGame();
+  }
+}
+
+canvas.addEventListener("touchstart", jump, {passive: false});
+canvas.addEventListener("mousedown", jump);
+
+function startEndless() {
+  endlessMode = true;
+  resetGame();
+}
+
+function spawnPipe() {
+  let gap = 170;
+  let top = Math.random() * (canvas.height - gap - 120) + 60;
+  let moving = endlessMode && score >= 15;
+  pipes.push({ x: canvas.width, top, bottom: canvas.height - (top + gap), passed: false, moving: moving, dir: 1, offset: 0 });
+}
+
+function spawnBullet() {
+  bullets.push({ x: canvas.width, y: Math.random() * (canvas.height - 20) + 10, speed: 5 + Math.random() * 3 });
+}
+
+function drawSheep(x, y) {
+  ctx.fillStyle = "white";
+  ctx.fillRect(x, y, 26, 20);
+  ctx.fillStyle = "#444";
+  ctx.fillRect(x + 18, y + 4, 10, 10);
+  ctx.fillStyle = "white";
+  ctx.fillRect(x + 23, y + 6, 3, 3);
+}
+
+function drawTree(x, y, w, h) {
+  ctx.fillStyle = "#8B4513";
+  ctx.fillRect(x + w / 2 - 5, y, 10, h);
+  ctx.fillStyle = "green";
+  ctx.fillRect(x, y === 0 ? h - 30 : y, w, 40);
+}
+
+function loop() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (started && !gameOver && !win) {
+    sheep.velocity += 0.45;
+    sheep.y += sheep.velocity;
+    if (pipes.length === 0 || pipes[pipes.length - 1].x < canvas.width - 250) spawnPipe();
+    pipes.forEach(p => {
+      p.x -= 3;
+      if (p.moving) {
+        p.offset += p.dir * 1.5;
+        if (Math.abs(p.offset) > 50) p.dir *= -1;
+      }
+      let drawTop = p.top + p.offset;
+      let drawBottomStart = canvas.height - p.bottom + p.offset;
+      drawTree(p.x, 0, 60, drawTop);
+      drawTree(p.x, drawBottomStart, 60, p.bottom - p.offset);
+      if (sheep.x < p.x + 60 && sheep.x + 26 > p.x && (sheep.y < drawTop || sheep.y + 20 > drawBottomStart)) gameOver = true;
+      if (!p.passed && p.x + 60 < sheep.x) {
+        score++;
+        p.passed = true;
+        if (!endlessMode && score >= 5) win = true;
+      }
+    });
+    if (endlessMode && score >= 10) if (Math.random() < 0.02) spawnBullet();
+    bullets.forEach((b, index) => {
+      b.x -= b.speed;
+      ctx.fillStyle = "red";
+      ctx.beginPath(); ctx.arc(b.x, b.y, 5, 0, Math.PI * 2); ctx.fill();
+      let dx = sheep.x + 13 - b.x; let dy = sheep.y + 10 - b.y;
+      if (Math.sqrt(dx*dx + dy*dy) < 15) gameOver = true;
+      if (b.x < -10) bullets.splice(index, 1);
+    });
+    if (pipes.length > 0 && pipes[0].x < -60) pipes.shift();
+    if (sheep.y < 0 || sheep.y + 20 > canvas.height) gameOver = true;
+  }
+  if (!win) drawSheep(sheep.x, sheep.y);
+  if (endlessMode && !gameOver && !win) {
+    ctx.fillStyle = "rgba(255,255,255,0.7)";
+    ctx.font = "bold 16px sans-serif";
+    ctx.textAlign = "center";
+    if (score >= 10 && score < 15) ctx.fillText("⚠️ 警告：子弹来袭！", canvas.width/2, 70);
+    if (score >= 15) ctx.fillText("🔥 极限：移动障碍！", canvas.width/2, 70);
+  }
+  document.getElementById("ui").innerText = endlessMode ? "分数：" + score : score + " / 5";
+  if (gameOver) {
+    if (endlessMode && score > best) { best = score; localStorage.setItem("sheep_best", best); document.getElementById("highScore").innerText = "最高：" + best; }
+    document.getElementById("start").innerText = "撞到了 😵 点击重来";
+    document.getElementById("start").style.display = "block";
+  }
+  if (win) {
+    document.getElementById("start").innerText = "🎉 通关成功！";
+    document.getElementById("start").style.top = "20%"; 
+    document.getElementById("start").style.display = "block";
+    ctx.fillStyle = "white";
+    ctx.fillRect(canvas.width / 2 - 85, canvas.height / 2 - 85, 170, 170);
+    ctx.drawImage(qrImg, canvas.width / 2 - 75, canvas.height / 2 - 75, 150, 150);
+    ctx.fillStyle = "white";
+    ctx.font = "bold 20px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("恭喜通关！扫一扫呀", canvas.width / 2, canvas.height / 2 + 120);
+    document.getElementById("restartBtn").style.display = "block";
+  }
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
